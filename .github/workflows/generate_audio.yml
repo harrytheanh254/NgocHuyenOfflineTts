@@ -1,0 +1,68 @@
+name: Tao Audio Ngoc Huyen Piper TTS
+
+on:
+  workflow_dispatch:
+    inputs:
+      text_file:
+        description: 'Ten file kich ban'
+        required: true
+        default: 'truyenchu.txt'
+      speed_choice:
+        description: 'Chon toc do doc'
+        required: true
+        default: '1.0'
+        type: choice
+        options:
+        - '1.0 (Chuan 1.0x)'
+        - '1.25 (Nhanh 1.25x)'
+        - '1.5 (Nhanh 1.5x)'
+        - '2.0 (Nhanh 2.0x)'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Lay ma nguon
+        uses: actions/checkout@v4
+
+      - name: Cai dat Python va ffmpeg
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Cai dat thu vien phu thuoc
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg wget
+          pip install piper-tts flask ffmpeg-python
+          if [ -f "requirements.txt" ]; then pip install -r requirements.txt; fi
+
+      - name: Tai model giong doc Ngoc Huyen (Piper)
+        run: |
+          mkdir -p models
+          cd models
+          wget -q -O vi_VN-25hours_single-low.onnx https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/25hours_single/low/vi_VN-25hours_single-low.onnx || true
+          wget -q -O vi_VN-25hours_single-low.onnx.json https://huggingface.co/rhasspy/piper-voices/resolve/main/vi/vi_VN/25hours_single/low/vi_VN-25hours_single-low.onnx.json || true
+
+      - name: Tao file audio MP3
+        run: |
+          FILE_NAME="${{ github.event.inputs.text_file }}"
+          SPEED_INPUT="${{ github.event.inputs.speed_choice }}"
+          SPEED=$(echo $SPEED_INPUT | awk '{print $1}')
+
+          if [ ! -f "$FILE_NAME" ]; then
+            echo "Khong tim thay file $FILE_NAME!"
+            exit 1
+          fi
+
+          # Su dung truc tiep piper de tao audio tu file van ban
+          cat "$FILE_NAME" | piper --model models/vi_VN-25hours_single-low.onnx --output_file raw_output.wav
+
+          # Thay doi toc do doc qua ffmpeg va xuat file MP3
+          ffmpeg -i raw_output.wav -filter:a "atempo=$SPEED" -vn audio_ngoc_huyen.mp3 -y
+
+      - name: Tai file MP3 ve
+        uses: actions/upload-artifact@v4
+        with:
+          name: audio-ngoc-huyen
+          path: audio_ngoc_huyen.mp3
